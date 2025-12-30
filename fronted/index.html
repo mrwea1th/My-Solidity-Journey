@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My First Web3 DApp</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" type="application/javascript"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 50px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #status { margin-top: 20px; color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>💰 Simple Bank DApp</h1>
+    
+    <button id="connectBtn" onclick="connectWallet()">🦊 连接钱包 (Connect Wallet)</button>
+    
+    <p id="status">状态: 未连接</p>
+    <p id="account">地址: ...</p>
+
+    <script>
+        async function connectWallet() {
+            // 3. 检查浏览器有没有装 MetaMask
+            if (typeof window.ethereum !== 'undefined') {
+                console.log('MetaMask is installed!');
+                
+                try {
+                    // 4. 【核心代码】向 MetaMask 发起连接请求
+                    // 这行代码执行时，小狐狸窗口就会弹出来
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+                    // 5. 获取到用户地址，显示在页面上
+                    const account = accounts[0];
+                    document.getElementById('status').innerText = "状态: 已连接";
+                    document.getElementById('account').innerText = "地址: " + account;
+                    
+                    // 6. 只要连上了，我们就能构建 Provider (这就相当于连上了区块链网线)
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    console.log("Provider created:", provider);
+                    
+                } catch (error) {
+                    console.error(error);
+                    document.getElementById('status').innerText = "连接被拒绝或出错";
+                }
+            } else {
+                alert('请先安装 MetaMask 插件!');
+            }
+        }
+    </script>
+</body>
+</html>
