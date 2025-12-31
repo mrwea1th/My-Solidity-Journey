@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank DApp Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="./abi.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .gradient-text {
+            background: linear-gradient(to right, #6EE7B7, #3B82F6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white h-screen flex items-center justify-center overflow-hidden relative">
+
+    <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+
+    <div class="glass w-full max-w-md p-8 rounded-2xl z-10 mx-4 relative">
+        
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl font-bold tracking-tighter">
+                <span class="text-3xl">🏦</span> 
+                <span class="gradient-text">Web3 Bank</span>
+            </h1>
+            <div id="statusDot" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+        </div>
+
+        <div class="text-center mb-8 py-6 bg-white/5 rounded-xl border border-white/5">
+            <p class="text-slate-400 text-sm mb-1 uppercase tracking-wider">My Balance</p>
+            <div class="flex justify-center items-baseline gap-1">
+                <span id="balanceDisplay" class="text-5xl font-extrabold text-white">0.00</span>
+                <span class="text-xl text-slate-500 font-bold">ETH</span>
+            </div>
+            <p id="accountArea" class="text-xs text-slate-500 mt-2 font-mono">0x000...0000</p>
+        </div>
+
+        <button id="connectBtn" onclick="connectWallet()" class="w-full mb-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition duration-200 transform hover:scale-[1.02] shadow-lg">
+            🦊 Connect Wallet
+        </button>
+
+        <div id="actionArea" class="hidden space-y-4 transition-all duration-500">
+            
+            <div class="group relative">
+                <div class="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-200"></div>
+                <div class="relative flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+                    <input type="number" id="depositAmount" placeholder="0.1" class="bg-transparent text-white p-3 w-full outline-none font-mono placeholder-slate-500" />
+                    <button onclick="depositMoney()" id="btnDeposit" class="bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-2 px-6 rounded-lg transition">
+                        Deposit
+                    </button>
+                </div>
+            </div>
+
+            <div class="group relative">
+                <div class="absolute -inset-0.5 bg-gradient-to-r from-rose-500 to-pink-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-200"></div>
+                <div class="relative flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+                    <input type="number" id="withdrawAmount" placeholder="Amount" class="bg-transparent text-white p-3 w-full outline-none font-mono placeholder-slate-500" />
+                    <button onclick="withdrawMoney()" id="btnWithdraw" class="bg-rose-500 hover:bg-rose-400 text-white font-bold py-2 px-4 rounded-lg transition">
+                        Withdraw
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="getMyBalance()" class="w-full py-2 text-slate-400 text-sm hover:text-white transition flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Balance
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // 🔴 必填：你的 Bank 合约地址
+        const contractAddress = "0x9CE92cB6A7D24E480496f7EE54A296641c517373"; // <--- 记得把你的地址填这儿！！
+
+        let provider, signer, bankContract, userAddress;
+
+        // 简单的通知函数 (替代丑陋的 alert)
+        function notify(msg, type='info') {
+            console.log(`[${type.toUpperCase()}] ${msg}`);
+            // 为了代码简洁，这里暂时只把按钮文字变一下作为反馈，你可以看控制台日志
+        }
+
+        async function connectWallet() {
+            if (typeof window.ethereum === 'undefined') return alert("请安装 MetaMask!");
+            
+            try {
+                const btn = document.getElementById('connectBtn');
+                btn.innerText = "Connecting...";
+                
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddress = accounts[0];
+
+                // 更新 UI
+                btn.className = "hidden"; // 连上后隐藏连接按钮
+                document.getElementById('actionArea').className = "space-y-4 block animate-fade-in-up"; // 显示操作区
+                document.getElementById('statusDot').className = "w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"; // 变绿灯
+                document.getElementById('accountArea').innerText = userAddress;
+
+                // 初始化 Ethers
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                bankContract = new ethers.Contract(contractAddress, BankABI, provider); // 默认只读
+
+                // 自动查余额
+                getMyBalance();
+
+            } catch (error) {
+                console.error(error);
+                alert("连接失败");
+                document.getElementById('connectBtn').innerText = "🦊 Connect Wallet";
+            }
+        }
+
+        async function getMyBalance() {
+            if (!bankContract) return;
+            try {
+                const balanceWei = await bankContract.balance(userAddress);
+                const balanceEth = ethers.utils.formatEther(balanceWei);
+                // 保留4位小数
+                document.getElementById('balanceDisplay').innerText = parseFloat(balanceEth).toFixed(4); 
+            } catch (error) { console.error(error); }
+        }
+
+        async function depositMoney() {
+            const amountStr = document.getElementById('depositAmount').value;
+            if (!amountStr) return alert("请输入金额");
+            
+            const btn = document.getElementById('btnDeposit');
+            const originalText = btn.innerText;
+            btn.innerText = "⏳";
+            btn.disabled = true;
+
+            try {
+                const bankWithSigner = bankContract.connect(signer);
+                const amountWei = ethers.utils.parseEther(amountStr);
+                const tx = await bankWithSigner.deposit({ value: amountWei });
+                
+                btn.innerText = "🚀 Sending...";
+                await tx.wait();
+                
+                alert("✅ 存款成功！");
+                document.getElementById('depositAmount').value = ""; // 清空输入框
+                getMyBalance();
+            } catch (error) {
+                console.error(error);
+                alert("❌ 失败: " + error.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function withdrawMoney() {
+            const amountStr = document.getElementById('withdrawAmount').value;
+            if (!amountStr) return alert("请输入金额");
+
+            const btn = document.getElementById('btnWithdraw');
+            const originalText = btn.innerText;
+            btn.innerText = "⏳";
+            btn.disabled = true;
+
+            try {
+                const bankWithSigner = bankContract.connect(signer);
+                const amountWei = ethers.utils.parseEther(amountStr);
+                const tx = await bankWithSigner.withdraw(amountWei);
+                
+                btn.innerText = "🚀 Taking...";
+                await tx.wait();
+                
+                alert("✅ 取款成功！");
+                document.getElementById('withdrawAmount').value = "";
+                getMyBalance();
+            } catch (error) {
+                console.error(error);
+                alert("❌ 失败: " + error.message);
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
