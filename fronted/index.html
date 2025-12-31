@@ -3,51 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My First Web3 DApp</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" type="application/javascript"></script>
+    <title>My Simple Bank</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="./abi.js"></script>
+    
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-        #status { margin-top: 20px; color: green; font-weight: bold; }
+        body { font-family: sans-serif; text-align: center; padding: 50px; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        #balanceDisplay { font-size: 24px; color: #28a745; font-weight: bold; margin: 20px 0; }
     </style>
 </head>
 <body>
 
-    <h1>💰 Simple Bank DApp</h1>
-    
-    <button id="connectBtn" onclick="connectWallet()">🦊 连接钱包 (Connect Wallet)</button>
-    
-    <p id="status">状态: 未连接</p>
-    <p id="account">地址: ...</p>
+    <div class="card">
+        <h1>🏦 老G的银行</h1>
+        
+        <button id="connectBtn" onclick="connectWallet()">🦊 1. 连接钱包</button>
+        <p id="accountArea">地址: 未连接</p>
+        
+        <hr>
+
+        <hr>
+        <h3>我要存钱</h3>
+        <input type="text" id="depositAmount" placeholder="0.1" /> 
+        <button onclick="depositMoney()">💸 存入银行</button>
+        <hr>
+        
+        <h3>我的存款</h3>
+        <div id="balanceDisplay">0.0 ETH</div>
+        <button onclick="getMyBalance()">💰 2. 刷新余额</button>
+
+        <hr>
+        <h3>我要取款</h3>
+        <input type="text" id="withdrawAmount" placeholder="想取多少？" /> 
+        <button onclick="withdrawMoney()" style="background-color: #dc3545;">🏧 取款跑路</button>
+        <hr>
+    </div>
 
     <script>
-        async function connectWallet() {
-            // 3. 检查浏览器有没有装 MetaMask
-            if (typeof window.ethereum !== 'undefined') {
-                console.log('MetaMask is installed!');
-                
-                try {
-                    // 4. 【核心代码】向 MetaMask 发起连接请求
-                    // 这行代码执行时，小狐狸窗口就会弹出来
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        // 🔴 必改项：把你的 Bank 合约地址填在这里！
+        const contractAddress = "0x9CE92cB6A7D24E480496f7EE54A296641c517373"; // <--- 填你的地址，保留引号
 
-                    // 5. 获取到用户地址，显示在页面上
-                    const account = accounts[0];
-                    document.getElementById('status').innerText = "状态: 已连接";
-                    document.getElementById('account').innerText = "地址: " + account;
+        let provider;
+        let signer;
+        let bankContract;
+        let userAddress;
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });//await和async配合使用，等待用户授权，async函数在await暂停执行等待用户操作，如本例，当request拿到用户的账户数组后才继续往下执行。
+                    userAddress = accounts[0];//accounts为啥是一个数组？答：因为用户可能有多个账户
                     
-                    // 6. 只要连上了，我们就能构建 Provider (这就相当于连上了区块链网线)
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
-                    console.log("Provider created:", provider);
+                    document.getElementById('connectBtn').innerText = "已连接";//这一步操作是把按钮文字改成“已连接”
+                    document.getElementById('accountArea').innerText = "地址: " + userAddress.substring(0, 6) + "..." + userAddress.substring(38);//substring是字符串截取函数，这里是把中间部分省略掉，只显示前6位和后4位
+
+                    // --- 关键 Web3 初始化 ---
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner(); // 签名者（如果是写操作，需要它）
+
+                    // 【核心概念】构建合约对象：地址 + ABI + 交互方式(Provider)
+                    // 这行代码之后，bankContract 就是你在 JS 里的“银行经理”
+                    bankContract = new ethers.Contract(contractAddress, BankABI, provider);
                     
+                    console.log("合约对象创建成功！", bankContract);
+
                 } catch (error) {
                     console.error(error);
-                    document.getElementById('status').innerText = "连接被拒绝或出错";
+                    alert("连接失败，请看控制台");
                 }
             } else {
-                alert('请先安装 MetaMask 插件!');
+                alert("请安装 MetaMask");
             }
         }
+
+        async function getMyBalance() {
+            if (!bankContract) return alert("请先连接钱包！");
+
+            try {
+                // 1. 调用合约的 balance 映射
+                // 在 Solidity 里是 mapping(address => uint)，在 JS 里就是个函数，传入地址
+                console.log("正在查询地址:", userAddress);
+                
+                // 【注意】这里必须用 await，因为去链上查数据需要时间
+                const balanceWei = await bankContract.balance(userAddress);
+                
+                console.log("原始数据 (Wei):", balanceWei.toString());
+
+                // 2. 格式化：把 Wei 变成 ETH
+                // 链上返回的是巨大的整数 (1 ETH = 10^18 Wei)，人看不懂，要转换
+                const balanceEth = ethers.utils.formatEther(balanceWei);
+
+                // 3. 更新网页
+                document.getElementById('balanceDisplay').innerText = balanceEth + " ETH";
+                
+            } catch (error) {
+                console.error("查询出错:", error);
+                alert("查询失败，请检查合约地址是否正确，或者 ABI 是否匹配");
+            }
+        }
+
+        async function depositMoney() {
+            // 1. 获取用户输入的金额
+            const amountStr = document.getElementById('depositAmount').value;//depositAmount是输入框的id，value是获取输入框的值
+            if (!amountStr) return alert("老哥，填个数字啊！");
+
+            try {
+                console.log("正在准备存钱:", amountStr, "ETH");
+
+                // --- 核心知识点：Provider vs Signer ---
+                // 之前查余额用的是 provider (只读)。
+                // 现在要存钱，涉及资产变动，必须用 signer (签名者)。
+                
+                // provider 是我们在 connectWallet 里初始化的
+                if (!provider) return alert("先连接钱包！");
+                
+                // 【关键】从 provider 里获取 signer
+                // 这行代码的意思是：让 MetaMask 准备好让用户签字
+                const signer = provider.getSigner();
+
+                // 【关键】创建一个“可写”的合约对象
+                // 之前的 bankContract 可能是只读的（如果它是用 provider 创建的）
+                // 现在我们用 signer 重新连一下合约
+                const bankWithSigner = bankContract.connect(signer);//connect是ethers.js里的一个方法，用来连接一个新的签名者，此时的银行经理是bankWithSigner
+
+                // 2. 金额转换：人看的 ETH -> 链上用的 Wei
+                // parseEther 意思是：把 "0.1" 变成 100000000000000000 (18个0)
+                const amountWei = ethers.utils.parseEther(amountStr);
+
+                // 3. 发起交易
+                // 调用合约的 deposit 函数
+                // 【注意】因为 deposit 是 payable 的，所以要在 overrides 里带上 value
+                console.log("等待钱包确认...");
+                const tx = await bankWithSigner.deposit({ value: amountWei });
+
+                console.log("交易已发送！哈希:", tx.hash);
+                alert("交易已发送，等待上链... (请不要关闭页面)");
+
+                // 4. 等待交易被矿工打包
+                // wait() 是 ethers.js 最优雅的功能，它会一直等到链上确认了才往下走
+                await tx.wait();
+
+                console.log("交易成功！");
+                alert("存钱成功！快去刷新余额看看！");
+
+                // 自动刷新一下余额
+                getMyBalance();
+
+            } catch (error) {
+                console.error("存钱失败:", error);
+                alert("存钱失败，详见控制台");
+            }
+        }
+
+    async function withdrawMoney() {
+        const amountStr = document.getElementById('withdrawAmount').value;
+        if (!amountStr) return alert("要取多少钱？填个数字！");
+
+        try {
+            console.log("准备取款:", amountStr, "ETH");
+
+            if (!provider) return alert("先连接钱包！");
+            
+            // 1. 依然需要 Signer，因为这会改变链上数据（改账本）
+            const signer = provider.getSigner();//为什么这里还要重新获取signer？答：因为每次调用getSigner()都会返回当前连接的钱包的签名者对象，确保我们使用的是最新的签名者实例。
+            const bankWithSigner = bankContract.connect(signer);
+
+            // 2. 转换金额
+            const amountWei = ethers.utils.parseEther(amountStr);
+
+            // 3. 调用合约
+            // 【注意区别】
+            // 存款是: .deposit({ value: amountWei })  <- 钱夹在信封里
+            // 取款是: .withdraw(amountWei)            <- 钱写在申请单上(参数)
+            console.log("等待钱包确认...");
+            const tx = await bankWithSigner.withdraw(amountWei);
+
+            console.log("取款请求已发送:", tx.hash);
+            alert("正在取款... 请等待上链");
+
+            await tx.wait();
+
+            console.log("取款成功！");
+            alert("钱已回到你的钱包！");
+            
+            // 刷新余额
+            getMyBalance();
+
+        } catch (error) {
+            console.error("取款失败:", error);
+            // 这里可能会遇到 "moneyShortage" 报错，如果余额不足的话
+            alert("取款失败！可能是余额不足，详见控制台");
+        }
+    }    
     </script>
 </body>
 </html>
