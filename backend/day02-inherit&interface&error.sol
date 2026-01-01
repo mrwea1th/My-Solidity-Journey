@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.21;
 // 【这是编译器生成的最终版 MyDEX，虽然你没这么写，但它实际长这样】
 contract MyDEX_Final {
     
@@ -19,5 +21,3 @@ contract MyDEX_Final {
         // 所以这里直接用，完全不报错！
     }
 }
-构造函数继承，核心理解。
-今天学了solidity中的继承，接口和异常，终于把大学没学明白的课自学补上了。感觉以后还是得在具体案例里重复实践，代码就不粘了
